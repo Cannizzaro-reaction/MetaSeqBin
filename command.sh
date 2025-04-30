@@ -1,0 +1,2 @@
+python markov_model.py --reads /home/bio/wcc_class/proj1/data/reads.fa --genomes /home/bio/wcc_class/proj1/data/genomes --test /home/bio/wcc_class/proj1/data/test.fa --seq_id_map /home/bio/wcc_class/proj1/data/seq_id.csv
+ 
