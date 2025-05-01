@@ -2,8 +2,9 @@ import os
 import numpy as np
 from Bio import SeqIO
 from collections import defaultdict
-import argparse
 import csv
+import argparse
+import time
 
 class KMarkovModel:
     def __init__(self, k=5):
@@ -19,29 +20,32 @@ class KMarkovModel:
             self.kmer_counts[genome_id] = defaultdict(int)
         
         # count k-mers and transitions
-        for i in range(len(sequence) - self.k): # 0 ~ l-k-1
-            kmer = sequence[i:i+self.k] # O_j
-            next_kmer = sequence[i+1:i+1+self.k] # O_j+1
+        for i in range(len(sequence) - self.k):
+            kmer = sequence[i:i+self.k]
+            next_kmer = sequence[i+1:i+1+self.k]
             
+            # kmer: F_i(O_m)
             self.kmer_counts[genome_id][kmer] += 1
+            # transition: F_i(O_m | O_n)
             self.transition_counts[genome_id][kmer][next_kmer] += 1
     
     def train(self, genome_files):
+        # get genome files
         self.genome_files = genome_files
         for i, genome_file in enumerate(genome_files):
-            # Store the filename without extension as genome name
             base_name = os.path.basename(genome_file)
             file_name = os.path.splitext(base_name)[0]
             self.genome_names.append(file_name)
             
             for record in SeqIO.parse(genome_file, "fasta"):
                 sequence = str(record.seq).upper()
+                # get F_i(O_m) and F_i(O_m | O_n) for each sequence
                 self.count_kmers_and_transitions(sequence, i)
     
     def calculate_score(self, query_sequence, genome_id):
         score = 0
         
-        for j in range(len(query_sequence) - self.k): # 0 ~ l-k-1
+        for j in range(len(query_sequence) - self.k):
             kmer = query_sequence[j:j+self.k]
             next_kmer = query_sequence[j+1:j+1+self.k]
             
@@ -61,7 +65,6 @@ class KMarkovModel:
         return score
     
     def classify_sequence(self, query_sequence):
-        # get best score and best id for classification
         best_score = float('inf')
         best_genome_id = -1
         
@@ -74,34 +77,97 @@ class KMarkovModel:
         return best_genome_id, best_score
     
     def get_all_scores(self, query_sequence):
-        """Get scores for all genomes for a given query sequence"""
         scores = {}
         for genome_id in range(len(self.genome_names)):
             scores[genome_id] = self.calculate_score(query_sequence, genome_id)
         return scores
 
-def process_reads(reads_file, model):
-    # assign reads to a genome
+
+def train_model(genomes_dir, k=11):
+    # get genome files
+    genome_files = [os.path.join(genomes_dir, f) for f in os.listdir(genomes_dir) 
+                    if f.endswith('.fa') or f.endswith('.fasta') or f.endswith('.fna')]
+    
+    # train model
+    model = KMarkovModel(k)
+    model.train(genome_files)
+    
+    return model, len(genome_files)
+
+
+def predict_sequences(model, reads_file, output_csv, scores_output=None):
+    # dictionary to store assigned reads by genome ID
     assigned_reads = defaultdict(list)
-    total_reads = 0
     
-    for record in SeqIO.parse(reads_file, "fasta"):
-        total_reads += 1
-        sequence = str(record.seq).upper()
+    # Count number of reads
+    num_reads = 0
+    
+    # CSV to write classification
+    with open(output_csv, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['sequence_id', 'genome_name'])
         
-        genome_id, score = model.classify_sequence(sequence)
-        assigned_reads[genome_id].append(record.id)
+        # record detailed score for assigning a read to each class
+        scores_file = None
+        if scores_output:
+            scores_file = open(scores_output, 'w')
+            scores_file.write("sequence_id,")
+            scores_file.write(",".join([model.genome_names[i] for i in range(len(model.genome_names))]))
+            scores_file.write("\n")
+        
+        # process each sequence in the reads file
+        for record in SeqIO.parse(reads_file, "fasta"):
+            num_reads += 1
+            sequence = str(record.seq).upper()
+
+            if scores_file:
+                scores = model.get_all_scores(sequence)
+                scores_file.write(f"{record.id}")
+                for genome_id in range(len(model.genome_names)):
+                    scores_file.write(f",{scores[genome_id]:.4f}")
+                scores_file.write("\n")
+                
+                # get best score
+                best_genome_id = min(scores, key=scores.get)
+            else:
+                best_genome_id, _ = model.classify_sequence(sequence)
+
+            assigned_reads[best_genome_id].append(record.id)
+            writer.writerow([record.id, model.genome_names[best_genome_id]])
+
+        if scores_file:
+            scores_file.close()
     
-    return assigned_reads, total_reads
+    return assigned_reads, num_reads
+
+
+def evaluate_accuracy(model, test_file, seq_id_map_file):
+    # get ground truth mappings
+    ground_truth = get_truth_class(seq_id_map_file, model)
+    
+    # evaluate accuracy
+    correct = 0
+    total = 0
+    
+    for record in SeqIO.parse(test_file, "fasta"):
+        if record.id in ground_truth:
+            total += 1
+            sequence = str(record.seq).upper()
+            genome_id, _ = model.classify_sequence(sequence)
+            if genome_id == ground_truth[record.id]:
+                correct += 1
+    
+    accuracy = correct / total if total > 0 else 0
+    print(f"Accuracy on test data: {accuracy:.4f} ({correct}/{total})\n")
+    
+    return accuracy, correct, total
+
 
 def get_truth_class(seq_id_map_file, model):
-    # Get mapping from genome name to ID
+    # get mapping from genome name to ID
     genome_name_to_id = {name: i for i, name in enumerate(model.genome_names)}
     
-    # Debug output
-    print(f"Available genome names: {model.genome_names}")
-    
-    # load csv
+    # load ground truth
     ground_truth = {}
     try:
         with open(seq_id_map_file, "r") as f:
@@ -135,113 +201,75 @@ def get_truth_class(seq_id_map_file, model):
     
     return ground_truth
 
-def calculate_accuracy(test_file, model, ground_truth):
-    correct = 0
-    total = 0
-    
-    for record in SeqIO.parse(test_file, "fasta"):
-        if record.id in ground_truth:
-            total += 1
-            sequence = str(record.seq).upper()
-            genome_id, _ = model.classify_sequence(sequence)
-            if genome_id == ground_truth[record.id]:
-                correct += 1
-    
-    accuracy = correct / total if total > 0 else 0
-    return accuracy, correct, total
 
-def main():
-    parser = argparse.ArgumentParser(description='Genomic sequence classification using Markov Models')
-    parser.add_argument('--reads', type=str, help='Path to reads FASTA file')
-    parser.add_argument('--genomes', type=str, help='Path to directory containing genome FASTA files')
-    parser.add_argument('--test', type=str, help='Path to test FASTA file')
-    parser.add_argument('--seq_id_map', type=str, help='Path to sequence ID mapping file')
-    parser.add_argument('--k', type=int, default=11, help='Order of the Markov Model')
-    parser.add_argument('--output', type=str, default='results.txt', help='Path to output file')
-    parser.add_argument('--scores_output', type=str, default='sequence_scores.txt', help='Path to sequence scores output file')
+def save_assignment_summary(model, assigned_reads, output_file, accuracy_info=None, timing_info=None):
+    total_reads = sum(len(reads) for reads in assigned_reads.values())
     
-    args = parser.parse_args()
-    
-    # Get genome files
-    genome_files = [os.path.join(args.genomes, f) for f in os.listdir(args.genomes) 
-                    if f.endswith('.fa') or f.endswith('.fasta') or f.endswith('.fna')]
-    
-    # Train model
-    model = KMarkovModel(args.k)
-    model.train(genome_files)
-    
-    # Calculate accuracy if test data is provided and output all scores
-    if args.test:
-        # Initialize ground truth if mapping file is provided
-        ground_truth = {}
-        if args.seq_id_map:
-            ground_truth = get_truth_class(args.seq_id_map, model)
-
-        # Process test sequences and get scores for all genomes
-        with open(args.scores_output, 'w') as f_scores:
-            # Write header: sequence_id, true_label, followed by genome names
-            f_scores.write("sequence_id,true_label,")
-            f_scores.write(",".join([model.genome_names[i] for i in range(len(model.genome_names))]))
-            f_scores.write("\n")
-            
-            correct = 0
-            total = 0
-            
-            # Create inverse mapping from genome_id to genome_name
-            genome_id_to_name = {i: name for i, name in enumerate(model.genome_names)}
-            
-            for record in SeqIO.parse(args.test, "fasta"):
-                sequence = str(record.seq).upper()
-                scores = model.get_all_scores(sequence)
-                
-                # Calculate best genome
-                best_genome_id = min(scores, key=scores.get)
-                
-                # Get true label (genome name) if available
-                true_label = "unknown"
-                if record.id in ground_truth:
-                    total += 1
-                    true_genome_id = ground_truth[record.id]
-                    true_label = genome_id_to_name.get(true_genome_id, f"unknown-{true_genome_id}")
-                    
-                    if best_genome_id == true_genome_id:
-                        correct += 1
-                
-                # Write sequence_id, true_label, followed by scores for all genomes
-                f_scores.write(f"{record.id},{true_label}")
-                for genome_id in range(len(model.genome_names)):
-                    f_scores.write(f",{scores[genome_id]:.4f}")
-                f_scores.write("\n")
+    with open(output_file, 'w') as f:
+        # Write timing information if provided
+        if timing_info:
+            elapsed_time, num_genomes, num_reads, k_value = timing_info
+            f.write(f"Execution time: {elapsed_time:.2f} seconds\n")
+            f.write(f"Number of genome files: {num_genomes}\n")
+            f.write(f"Number of reads: {num_reads}\n")
+            f.write(f"K-mer size: {k_value}\n\n")
         
-        # Calculate accuracy
-        accuracy = correct / total if total > 0 else 0
-    
-    # Process reads if provided
-    assigned_reads = defaultdict(list)
-    total_reads = 0
-    
-    if args.reads:
-        assigned_reads, total_reads = process_reads(args.reads, model)
-    
-    # Write results to file
-    with open(args.output, 'w') as f:
-        # Output accuracy if calculated
-        if args.test and total > 0:
+        # Write accuracy information if provided
+        if accuracy_info:
+            accuracy, correct, total = accuracy_info
             f.write(f"Accuracy on test data: {accuracy:.4f} ({correct}/{total})\n\n")
         
-        # Output reads info if processed
-        if args.reads:
-            f.write(f"Total number of reads: {total_reads}\n")
-            f.write(f"Number of assigned reads: {sum(len(reads) for reads in assigned_reads.values())}\n\n")
-            
-            f.write("Assigned reads by genome:\n")
-            for genome_id in range(len(model.genome_names)):
-                read_count = len(assigned_reads[genome_id]) if genome_id in assigned_reads else 0
-                f.write(f"{model.genome_names[genome_id]}: {read_count} reads\n")
-    
-    print(f"Results written to {args.output}")
-    if args.test:
-        print(f"Sequence scores written to {args.scores_output}")
+        f.write(f"Total number of reads: {total_reads}\n")
+        f.write(f"Number of assigned reads: {total_reads}\n\n")
+        
+        f.write("Assigned reads by genome:\n")
+        for genome_id in range(len(model.genome_names)):
+            read_count = len(assigned_reads[genome_id]) if genome_id in assigned_reads else 0
+            f.write(f"{model.genome_names[genome_id]}: {read_count} reads\n")
 
+
+##############################################################
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description='Genomic sequence classification using Markov Models')
+    parser.add_argument('--genomes', type=str, required=True, help='Path to directory containing genome FASTA files')
+    parser.add_argument('--reads', type=str, required=True, help='Reads in FASTA file that need to be assigned')
+    parser.add_argument('--output_csv', type=str, required=True, help='Path to output CSV file with classifications')
+    parser.add_argument('--scores_output', type=str, help='Path to sequence scores output file')
+    parser.add_argument('--k', type=int, default=5, help='Order of the Markov Model')
+    parser.add_argument('--eval', action='store_true', help='Run in test mode with accuracy evaluation')
+    parser.add_argument('--seq_id_map', type=str, help='Path to sequence ID mapping file (required for test mode)')
+    parser.add_argument('--assignment_summary', type=str, help='Path to read assignment summary output file')
+    parser.add_argument('--time', action='store_true', help='Track and report execution time')
+    
+    args = parser.parse_args()
+
+    start_time = time.time() if args.time else None
+    
+    # train model
+    model, num_genomes = train_model(args.genomes, args.k)
+    
+    # prediction
+    assigned_reads, num_reads = predict_sequences(model, args.reads, args.output_csv, args.scores_output)
+
+    end_time = time.time() if args.time else None
+    elapsed_time = end_time - start_time if args.time else None
+    
+    # record timing info
+    timing_info = None
+    if args.time:
+        timing_info = (elapsed_time, num_genomes, num_reads, args.k)
+        print(f"Execution time: {elapsed_time:.2f} seconds")
+        print(f"Processed {num_genomes} genome files and {num_reads} reads with k={args.k}")
+
+    # record accuracy info
+    accuracy_info = None
+    if args.eval:
+        if not args.seq_id_map:
+            print("Error: --seq_id_map is required in test mode")
+        else:
+            # evaluate and store accuracy information
+            accuracy_info = evaluate_accuracy(model, args.reads, args.seq_id_map)
+
+    # get summary info
+    if args.assignment_summary:
+        save_assignment_summary(model, assigned_reads, args.assignment_summary, accuracy_info, timing_info)
