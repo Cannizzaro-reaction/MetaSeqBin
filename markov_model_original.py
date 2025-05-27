@@ -142,59 +142,6 @@ def predict_sequences(model, reads_file, output_csv, scores_output=None):
     return assigned_reads, num_reads
 
 
-def merge_classify_sequence(models, weights, query_sequence):
-    """
-    Combine classification from multiple models with given weights.
-    models: list of KMarkovModel objects
-    weights: list of floats (normalized weights)
-    query_sequence: DNA string
-    """
-    genome_ids = range(len(models[0].genome_names))
-    merged_scores = {gid: 0.0 for gid in genome_ids}
-
-    # Sum weighted scores from each model
-    for model, weight in zip(models, weights):
-        scores = model.get_all_scores(query_sequence)
-        for gid in genome_ids:
-            merged_scores[gid] += weight * scores[gid]
-
-    # Select genome with lowest weighted total score
-    best_genome_id = min(merged_scores, key=merged_scores.get)
-    return best_genome_id, merged_scores
-
-
-def predict_sequences_merged(models, weights, reads_file, output_csv, scores_output=None):
-    
-    assigned_reads = defaultdict(list)
-    num_reads = 0
-
-    with open(output_csv, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['sequence_id', 'genome_name'])
-
-        scores_file = None
-        if scores_output:
-            scores_file = open(scores_output, 'w')
-            scores_file.write("sequence_id," + ",".join(models[0].genome_names) + "\n")
-
-        for record in SeqIO.parse(reads_file, "fasta"):
-            sequence = str(record.seq).upper()
-            best_genome_id, merged_scores = merge_classify_sequence(models, weights, sequence)
-            assigned_reads[best_genome_id].append(record.id)
-            writer.writerow([record.id, models[0].genome_names[best_genome_id]])
-            num_reads += 1
-
-            if scores_file:
-                scores_file.write(record.id)
-                for gid in range(len(models[0].genome_names)):
-                    scores_file.write(f",{merged_scores[gid]:.4f}")
-                scores_file.write("\n")
-
-        if scores_file:
-            scores_file.close()
-        
-    return assigned_reads, num_reads
-
 def evaluate_metrics(model, test_file, seq_id_map_file):
     # get ground truth mappings
     ground_truth = get_truth_class(seq_id_map_file, model)
@@ -233,42 +180,6 @@ def evaluate_metrics(model, test_file, seq_id_map_file):
     
     return accuracy, correct, total, macro_precision, macro_recall, macro_f1
 
-
-def evaluate_metrics_combined(models, weights, test_file, seq_id_map_file):
-    from sklearn.metrics import precision_score, recall_score, f1_score, classification_report
-    from Bio import SeqIO
-
-    ground_truth = get_truth_class(seq_id_map_file, models[0])
-    y_true = []
-    y_pred = []
-    correct = 0
-    total = 0
-
-    for record in SeqIO.parse(test_file, "fasta"):
-        if record.id in ground_truth:
-            sequence = str(record.seq).upper()
-            genome_id, _ = merge_classify_sequence(models, weights, sequence)
-            y_true.append(ground_truth[record.id])
-            y_pred.append(genome_id)
-            total += 1
-            if genome_id == ground_truth[record.id]:
-                correct += 1
-
-    accuracy = correct / total if total > 0 else 0
-    print(f"Accuracy on test data: {accuracy:.4f} ({correct}/{total})")
-
-    macro_precision = precision_score(y_true, y_pred, average='macro', zero_division=0)
-    macro_recall = recall_score(y_true, y_pred, average='macro', zero_division=0)
-    macro_f1 = f1_score(y_true, y_pred, average='macro', zero_division=0)
-
-    print(f"Macro Precision: {macro_precision:.4f}")
-    print(f"Macro Recall:    {macro_recall:.4f}")
-    print(f"Macro F1-score:  {macro_f1:.4f}\n")
-
-    print("Classification report:")
-    print(classification_report(y_true, y_pred, target_names=models[0].genome_names, zero_division=0))
-
-    return accuracy, correct, total, macro_precision, macro_recall, macro_f1
 
 def get_truth_class(seq_id_map_file, model):
     # get mapping from genome name to ID
@@ -309,7 +220,7 @@ def get_truth_class(seq_id_map_file, model):
     return ground_truth
 
 
-def save_assignment_summary(model, assigned_reads, output_file, accuracy_info=None, timing_info=None, combine_info=None):
+def save_assignment_summary(model, assigned_reads, output_file, accuracy_info=None, timing_info=None):
     total_reads = sum(len(reads) for reads in assigned_reads.values())
     
     with open(output_file, 'w') as f:
@@ -319,12 +230,7 @@ def save_assignment_summary(model, assigned_reads, output_file, accuracy_info=No
             f.write(f"Execution time: {elapsed_time:.2f} seconds\n")
             f.write(f"Number of genome files: {num_genomes}\n")
             f.write(f"Number of reads: {num_reads}\n")
-            if combine_info:
-                k_values, weights = combine_info
-                f.write(f"K-mer sizes: {k_values}\n")
-                f.write(f"Normalized weights: {weights}\n\n")
-            else:
-                f.write(f"K-mer size: {k_value}\n\n")
+            f.write(f"K-mer size: {k_value}\n\n")
         
         # Write accuracy information if provided
         if accuracy_info:
@@ -345,10 +251,6 @@ def save_assignment_summary(model, assigned_reads, output_file, accuracy_info=No
 
 ##############################################################
 if __name__ == "__main__":
-    def normalize(weights):
-        total = sum(weights)
-        return [w / total for w in weights]
-    
     parser = argparse.ArgumentParser(description='Genomic sequence classification using Markov Models')
     parser.add_argument('--genomes', type=str, required=True, help='Path to directory containing genome FASTA files')
     parser.add_argument('--reads', type=str, required=True, help='Reads in FASTA file that need to be assigned')
@@ -359,27 +261,16 @@ if __name__ == "__main__":
     parser.add_argument('--seq_id_map', type=str, help='Path to sequence ID mapping file (required for test mode)')
     parser.add_argument('--assignment_summary', type=str, help='Path to read assignment summary output file')
     parser.add_argument('--time', action='store_true', help='Track and report execution time')
-
-    # New parameters for combined mode
-    parser.add_argument('--combine', action='store_true', help='Use combined multi-k Markov model')
-    parser.add_argument('--k_values', type=int, nargs=3, help='Three k values for combined models (e.g., 3 4 5)')
-    parser.add_argument('--weights', type=float, nargs=3, help='Accuracy values for three models (used to normalize weights)')
-
+    
     args = parser.parse_args()
 
     start_time = time.time() if args.time else None
-    combine_info = None
     
-    if args.combine:
-        assert args.k_values and args.weights, "--k_values and --weights must be provided in --combine mode"
-        models = [train_model(args.genomes, k)[0] for k in args.k_values]
-        weights = normalize(args.weights)
-        combine_info = (args.k_values, weights)
-        assigned_reads, num_reads = predict_sequences_merged(models, weights, args.reads, args.output_csv, args.scores_output)
-        num_genomes = len(models[0].genome_names)
-    else:
-        model, num_genomes = train_model(args.genomes, args.k)
-        assigned_reads, num_reads = predict_sequences(model, args.reads, args.output_csv, args.scores_output)
+    # train model
+    model, num_genomes = train_model(args.genomes, args.k)
+    
+    # prediction
+    assigned_reads, num_reads = predict_sequences(model, args.reads, args.output_csv, args.scores_output)
 
     end_time = time.time() if args.time else None
     elapsed_time = end_time - start_time if args.time else None
@@ -389,10 +280,7 @@ if __name__ == "__main__":
     if args.time:
         timing_info = (elapsed_time, num_genomes, num_reads, args.k)
         print(f"Execution time: {elapsed_time:.2f} seconds")
-        if args.combine:
-            print(f"Processed {num_genomes} genome files and {num_reads} reads with k values {args.k_values} and weights {weights}")
-        else:
-            print(f"Processed {num_genomes} genome files and {num_reads} reads with k={args.k}")
+        print(f"Processed {num_genomes} genome files and {num_reads} reads with k={args.k}")
 
     # record accuracy info
     accuracy_info = None
@@ -401,11 +289,8 @@ if __name__ == "__main__":
             print("Error: --seq_id_map is required in test mode")
         else:
             # evaluate and store accuracy information
-            if args.combine:
-                accuracy_info = evaluate_metrics_combined(models, weights, args.reads, args.seq_id_map)
-            else:
-                accuracy_info = evaluate_metrics(model, args.reads, args.seq_id_map)
+            accuracy_info = evaluate_metrics(model, args.reads, args.seq_id_map)
 
     # get summary info
     if args.assignment_summary:
-        save_assignment_summary(model if not args.combine else models[0], assigned_reads, args.assignment_summary, accuracy_info, timing_info, combine_info)
+        save_assignment_summary(model, assigned_reads, args.assignment_summary, accuracy_info, timing_info)

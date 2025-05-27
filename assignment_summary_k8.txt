@@ -1,0 +1,25 @@
+Execution time: 68.17 seconds
+Number of genome files: 10
+Number of reads: 20000
+K-mer size: 8
+
+Accuracy on test data: 0.9170 (18339/20000)
+
+Macro Precision: 0.9172
+Macro Recall:    0.9172
+Macro F1-score:  0.9171
+
+Total number of reads: 20000
+Number of assigned reads: 20000
+
+Assigned reads by genome:
+NC_007984: 2017 reads
+NC_015722: 1893 reads
+NC_011138: 2047 reads
+NC_015859: 2044 reads
+NC_013943: 2013 reads
+NC_009767: 1984 reads
+NC_008709: 2057 reads
+NC_015656: 1877 reads
+NC_009511: 2039 reads
+NC_011126: 2029 reads
