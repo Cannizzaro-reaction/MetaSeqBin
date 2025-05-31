@@ -1,0 +1,31 @@
+Using adaptive weighting ensemble method
+K values: [3, 4, 5]
+
+==================================================
+EXECUTION SUMMARY
+==================================================
+Execution time: 126.18 seconds
+Number of genome files: 10
+Number of reads: 20000
+K-mer sizes: [3, 4, 5]
+Normalized weights: [np.float64(0.3323735041126589), np.float64(0.3332535494306921), np.float64(0.33437294645664645)]
+Accuracy on test data: 0.6478 (12955/20000)
+Macro Precision: 0.6446
+Macro Recall:    0.6475
+Macro F1-score:  0.6449
+Total number of reads: 20000
+Number of assigned reads: 20000
+Assigned reads by genome:
+NC_013943: 2126 reads
+NC_015859: 1942 reads
+NC_007984: 2193 reads
+NC_009767: 2114 reads
+NC_011126: 2128 reads
+NC_015722: 1667 reads
+NC_011138: 2282 reads
+NC_009511: 1970 reads
+NC_015656: 1801 reads
+NC_008709: 1777 reads
+==================================================
+Results saved to classification_result_k345.csv
+Detailed results saved to score_detail_k345.csv
