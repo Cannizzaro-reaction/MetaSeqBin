@@ -1,0 +1,34 @@
+Using majority voting ensemble method
+K values: [3, 4, 5]
+
+==================================================
+EXECUTION SUMMARY
+==================================================
+Execution time: 190.24 seconds
+Number of genome files: 10
+Number of reads: 20000
+K-mer sizes: [3, 4, 5]
+Voting Statistics:
+  Unanimous decisions: 71.1% (14212 sequences)
+  Majority decisions:  26.8% (5369 sequences)
+  Tie-breaker decisions: 2.1% (419 sequences)
+Accuracy on test data: 0.6480 (12960/20000)
+Macro Precision: 0.6443
+Macro Recall:    0.6477
+Macro F1-score:  0.6446
+Total number of reads: 20000
+Number of assigned reads: 20000
+Assigned reads by genome:
+NC_013943: 2112 reads
+NC_015859: 1937 reads
+NC_007984: 2226 reads
+NC_009767: 2137 reads
+NC_011126: 2173 reads
+NC_015722: 1644 reads
+NC_011138: 2249 reads
+NC_009511: 1994 reads
+NC_015656: 1767 reads
+NC_008709: 1761 reads
+==================================================
+Results saved to classification_result_k678.csv
+Detailed results saved to score_detail_k678.csv
