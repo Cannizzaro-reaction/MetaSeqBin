@@ -1,5 +1,22 @@
-# MetaGeneBin
-Course project for BIO3501, SJTU, 2025 spring
+
+
+<div align="center">
+    <h1>
+    MetaGeneBin: Genomic Sequence Classification Using K-order Markov Model
+    </h1>
+    <p>
+    Course project for BIO3501, 2025 spring, SJTU
+    <br />
+    <a href="https://github.com/Cannizzaro-reaction"><strong>Cannizzaro-reaction</strong></a>
+    &nbsp;
+    <a href="https://github.com/cutiexue"><strong>cutiexue</strong></a>
+    &nbsp;
+    </p>
+    <p>
+    <a href="https://github.com/Cannizzaro-reaction/MetaSeqBin"><img alt="Github Repository" src="https://img.shields.io/badge/Github-Repository-blue?logo=github&logoColor=blue"></a>
+    <a href="https://github.com/Cannizzaro-reaction/MetaSeqBin/blob/main/LICENSE"><img alt="mit" src="https://img.shields.io/badge/License-MIT-red.svg"></a>
+    </p>
+</div>
 
 
 
