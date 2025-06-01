@@ -27,17 +27,17 @@ We use a $k^{th}$ order Markov model to classify DNA sequences , which captures 
   For each genome in the reference database, a Markov chain is built using k-mers (short DNA words of length $k$). Each state in the chain represents a k-mer, and transitions represent how often one k-mer is followed by another.
 
   The transition probability from k-mer $O_m$ to $O_n$ is calculated based on the following computational formula:
-  $$
-  kMM_{i,mn} = P_i(O_m | O_n) = \frac{F_i(O_m|O_n)}{F_i(O_m)}
-  $$
+
+  $$kMM_{i,mn} = P_i(O_m | O_n) = \frac{F_i(O_m|O_n)}{F_i(O_m)}$$
+
   where $O_m$ and  $O_m$are oligonucleotides of length $k$, $P(O_m|O_n)$ represents the transition probability from  $O_m$ to $O_n$,  $F(O_m|O_n)$ represents observed count of transitions from  $O_m$ to $O_n$ in a genomic sequence $i$ and $F(O_m)$ is the observed count of $O_m$.
 
 * **Sequence Scoring**:
 
   For a query read, the method calculates a score $S_i$ for each reference genome $i$:
-  $$
-  S_i = -\sum_{j = 0}^{l - k - 1}ln(P_i(O_{j} | O_{j+1}))
-  $$
+
+  $$S_i = -\sum_{j = 0}^{l - k - 1}ln(P_i(O_{j} | O_{j+1}))$$
+
   where $O_j$ and $O_{j+1}$ are two oligonucleotides of length $k$, and $P(O_{j} | O_{j+1})$ is the transition probability from $O_j$ to $O_{j+1}$ observed in the $i^{th}$ genome. When the transition from $O_j$ to $O_{j+1}$ does not exist in the $i^{th}$ genome, the logarithm value of the transition probability will be set to a constant (default is 10). 
 
   The genome with the lowest total score (i.e., highest likelihood) is considered the best match.
@@ -50,7 +50,7 @@ We use a $k^{th}$ order Markov model to classify DNA sequences , which captures 
 
   In this method, multiple k-th order Markov models (each trained with a different value of k) are used to compute scores for each genome. For a given read, each model generates a likelihood-based score for every genome. These scores are then combined using a weighted sum:
 
-  $$\text{Merged Score}_g = \sum_{i=1}^3 w_i \cdot \text{Score}_{g}^{(k_i)}$$
+  $$Merged Score_g = \sum_{i=1}^3 w_i \cdot Score_{g}^{(k_i)}$$
 
   where $\text{Score}_{g}^{(k_i)}$ is the score for genome g from the i-th model with order $k_i$, $w_i$ is the normalized weight assigned to the i-th model (in our project the original weights are based on eah model's individual accuracy).
 
