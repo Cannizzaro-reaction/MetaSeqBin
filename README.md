@@ -30,7 +30,7 @@ We use a $k^{th}$ order Markov model to classify DNA sequences , which captures 
 
   $$kMM_{i,mn} = P_i(O_m | O_n) = \frac{F_i(O_m|O_n)}{F_i(O_m)}$$
 
-  where $O_m$ and  $O_m$are oligonucleotides of length $k$, $P(O_m|O_n)$ represents the transition probability from  $O_m$ to $O_n$,  $F(O_m|O_n)$ represents observed count of transitions from  $O_m$ to $O_n$ in a genomic sequence $i$ and $F(O_m)$ is the observed count of $O_m$.
+  where $O_m$ and  $O_m$ are oligonucleotides of length $k$, $P(O_m|O_n)$ represents the transition probability from  $O_m$ to $O_n$,  $F(O_m|O_n)$ represents observed count of transitions from  $O_m$ to $O_n$ in a genomic sequence $i$ and $F(O_m)$ is the observed count of $O_m$.
 
 * **Sequence Scoring**:
 
